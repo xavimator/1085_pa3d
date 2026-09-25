@@ -291,12 +291,19 @@ button{font-family:var(--font-body);cursor:pointer;}
 }
 
 .slide-viewport{
-  flex:1; display:flex; flex-direction:column; justify-content:center;
+  flex:1; display:flex; flex-direction:column; justify-content:flex-start;
   padding:96px 26px 150px;
   position:relative;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain; touch-action:pan-y;
+  scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.25) transparent;
 }
+.slide-viewport::-webkit-scrollbar{width:5px;}
+.slide-viewport::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.22); border-radius:4px;}
+.slide-viewport::-webkit-scrollbar-track{background:transparent;}
 .slide-card{
   animation:cardIn .32s ease;
+  margin:auto 0;
 }
 @keyframes cardIn{
   from{opacity:0; transform:translateY(14px);}
@@ -757,7 +764,7 @@ svg.icon{width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:2
       <div class="reader-controls">
         <div class="read-countdown" id="readCountdown">
           <span class="dot"></span>
-          <span id="readCountdownText">Leyendo… 20 s</span>
+          <span id="readCountdownText">Leyendo… 60 s</span>
         </div>
         <div class="progress-row">
           <button class="nav-arrow" id="prevArrow">
@@ -6550,7 +6557,7 @@ async function renderResultsPanel(){
         <div class="result-sub">${slidesRead} páginas vistas · ${(u.attempts||[]).length} cuestionarios resueltos</div>
         <div class="result-read-pct">
           <div class="result-read-bar"><div class="result-read-fill" style="width:${pct}%"></div></div>
-          <span>${pct}% leídas a tiempo (≥20 s) · ${slidesOk}/${slidesRead}</span>
+          <span>${pct}% leídas a tiempo (≥60 s) · ${slidesOk}/${slidesRead}</span>
         </div>
         <div class="result-chapters">${chapterRows}</div>
         <button class="result-toggle-detail" data-user="${escapeHtml(u.username)}">${detailOpen ? 'Ocultar' : 'Ver'} páginas leídas antes de tiempo (${notOk.length})</button>
@@ -6632,7 +6639,7 @@ const state = {
   screen: 'login',
   quiz: null,             // active quiz session {questions, idx, correct, incorrect, answered, chapterKey, standalone}
   locks: {},              // group_key -> row from content_locks (cargado desde Supabase)
-  readOkSlides: new Set(), // índices de diapositivas ya leídas ≥20s alguna vez por este usuario
+  readOkSlides: new Set(), // índices de diapositivas ya leídas ≥60s alguna vez por este usuario
 };
 
 /* ---------- páginas ya leídas a tiempo (persistido por usuario) ---------- */
@@ -6957,7 +6964,7 @@ function renderContentSlide(data){
 
 function timeOnSlideOk(){
   if(state.slideEnterTime === null) return true;
-  return (Date.now() - state.slideEnterTime) >= 20000;
+  return (Date.now() - state.slideEnterTime) >= 60000;
 }
 
 function startReadCountdown(){
@@ -6971,7 +6978,7 @@ function startReadCountdown(){
   }
   const tick = () => {
     const elapsed = Date.now() - state.slideEnterTime;
-    const remaining = Math.max(0, 20 - Math.floor(elapsed / 1000));
+    const remaining = Math.max(0, 60 - Math.floor(elapsed / 1000));
     if(remaining <= 0){
       el.textContent = 'Pasar página';
       pill.classList.add('ready');
@@ -6995,8 +7002,8 @@ function showReadToast(){
 function goNext(){
   const idx = state.currentSlide;
   const alreadyOk = isSlideAlreadyReadOk(idx);
-  const elapsed = state.slideEnterTime === null ? 20000 : (Date.now() - state.slideEnterTime);
-  const readOk = alreadyOk || elapsed >= 20000;
+  const elapsed = state.slideEnterTime === null ? 60000 : (Date.now() - state.slideEnterTime);
+  const readOk = alreadyOk || elapsed >= 60000;
   if(!readOk) showReadToast();
   const data = FLAT[idx];
   if(readOk) markSlideReadOk(idx);
@@ -7043,8 +7050,8 @@ function proceedNext(data){
 function goPrev(){
   const idx = state.currentSlide;
   const alreadyOk = isSlideAlreadyReadOk(idx);
-  const elapsed = state.slideEnterTime === null ? 20000 : (Date.now() - state.slideEnterTime);
-  const readOk = alreadyOk || elapsed >= 20000;
+  const elapsed = state.slideEnterTime === null ? 60000 : (Date.now() - state.slideEnterTime);
+  const readOk = alreadyOk || elapsed >= 60000;
   if(!readOk) showReadToast();
   if(readOk) markSlideReadOk(idx);
   if(!alreadyOk) trackSlideView(FLAT[idx], elapsed, readOk);
@@ -7097,8 +7104,8 @@ function initScrub(){
   scrub.addEventListener('change', () => {
     const idx = state.currentSlide;
     const alreadyOk = isSlideAlreadyReadOk(idx);
-    const elapsed = state.slideEnterTime === null ? 20000 : (Date.now() - state.slideEnterTime);
-    const readOk = alreadyOk || elapsed >= 20000;
+    const elapsed = state.slideEnterTime === null ? 60000 : (Date.now() - state.slideEnterTime);
+    const readOk = alreadyOk || elapsed >= 60000;
     if(!readOk) showReadToast();
     if(readOk) markSlideReadOk(idx);
     if(!alreadyOk) trackSlideView(FLAT[idx], elapsed, readOk);
