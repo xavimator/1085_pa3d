@@ -6840,6 +6840,40 @@ function enterReader(fromIndex){
   renderSlide();
 }
 
+// Ajusta el padding del viewport a la altura REAL de los controles
+// superiores/inferiores (en vez de un valor fijo), para que el texto
+// nunca quede tapado, aunque la píldora del capítulo ocupe varias líneas
+// o los controles inferiores cambien de tamaño según el dispositivo.
+function syncReaderPadding(screenSel){
+  const scope = document.querySelector(screenSel);
+  if(!scope) return;
+  const top = scope.querySelector('.reader-top');
+  const controls = scope.querySelector('.reader-controls');
+  const viewport = scope.querySelector('.slide-viewport');
+  if(!viewport) return;
+  if(top) viewport.style.paddingTop = (top.offsetHeight + 22) + 'px';
+  if(controls) viewport.style.paddingBottom = (controls.offsetHeight + 22) + 'px';
+}
+
+function setupAdaptivePadding(){
+  ['#screen-reader', '#screen-practice'].forEach(sel => {
+    syncReaderPadding(sel);
+    const scope = document.querySelector(sel);
+    if(!scope) return;
+    const top = scope.querySelector('.reader-top');
+    const controls = scope.querySelector('.reader-controls');
+    if('ResizeObserver' in window){
+      const ro = new ResizeObserver(() => syncReaderPadding(sel));
+      if(top) ro.observe(top);
+      if(controls) ro.observe(controls);
+    }
+  });
+  window.addEventListener('resize', () => {
+    syncReaderPadding('#screen-reader');
+    syncReaderPadding('#screen-practice');
+  });
+}
+
 function renderSlide(){
   const idx = state.currentSlide;
   const data = FLAT[idx];
@@ -6878,6 +6912,7 @@ function renderSlide(){
     card.appendChild(renderContentSlide(data));
   }
   viewport.appendChild(card);
+  syncReaderPadding('#screen-reader');
 }
 
 function escapeHtml(str){
@@ -7178,6 +7213,7 @@ function renderQuizQuestion(){
     optWrap.appendChild(b);
   });
   container.appendChild(wrap);
+  syncReaderPadding(quiz.standalone ? '#screen-practice' : '#screen-reader');
 }
 
 function answerQuiz(i, wrap){
@@ -7238,6 +7274,7 @@ function renderQuizResult(){
   if(quiz.standalone){
     wrap.querySelector('#quizDoneBtn').addEventListener('click', () => showScreen('home'));
   }
+  syncReaderPadding(quiz.standalone ? '#screen-practice' : '#screen-reader');
 }
 
 /* ============================================================
@@ -7477,6 +7514,8 @@ function init(){
     }
     touchStartX = null;
   }, {passive:true});
+
+  setupAdaptivePadding();
 
   showScreen('login');
 }
