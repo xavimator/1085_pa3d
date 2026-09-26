@@ -272,7 +272,7 @@ button{font-family:var(--font-body);cursor:pointer;}
 .home-actions{display:flex; flex-direction:column; gap:10px; margin-top:auto; padding-top:6px;}
 
 /* ==================== SLIDE READER ==================== */
-.reader{background:var(--petrol-deep); min-height:100%; position:relative;}
+.reader{background:var(--petrol-deep); height:100%; position:relative; display:flex; flex-direction:column;}
 .reader-top{
   position:absolute; top:calc(14px + var(--safe-t)); left:14px; right:14px;
   display:flex; justify-content:space-between; align-items:flex-start; z-index:20;
@@ -294,7 +294,7 @@ button{font-family:var(--font-body);cursor:pointer;}
 }
 
 .slide-viewport{
-  flex:1; display:flex; flex-direction:column; justify-content:flex-start;
+  flex:1; min-height:0; display:flex; flex-direction:column; justify-content:flex-start;
   padding:96px 26px 150px;
   position:relative;
   overflow-y:auto; -webkit-overflow-scrolling:touch;
@@ -1844,13 +1844,13 @@ const CHAPTERS = [
     "slides": [
       {
         "num": 1,
-        "title": "Animación Actual",
+        "title": "En la actualidad estamos viviendo un periodo de expansión de la animación y su industria en todas sus vertientes artísticas y comerciales. Esto se refleja en un elevado consumo de animación, en multiples plataformas y formatos que van más allá del largometraje para salas de cine",
         "kicker": "La industria de la animación (I)",
         "virtual": false,
         "blocks": [
           {
             "type": "p",
-            "text": "En la actualidad estamos viviendo un periodo de expansión de la animación y su industria en todas sus vertientes artísticas y comerciales. Esto se refleja en un elevado consumo de animación, en multiples plataformas y formatos que van más allá del largometraje para salas de cine. El sector de la animación se define por una doble vertiente:"
+            "text": "El sector de la animación se define por una doble vertiente:"
           },
           {
             "type": "list",
