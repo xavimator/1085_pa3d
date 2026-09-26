@@ -12,9 +12,13 @@
      red real siempre, así que se dejan pasar directamente.
 
    v1: primera versión de la caché para el curso 1085.
+   v2: se sube la versión para forzar que los dispositivos que ya
+   tenían la app instalada descarten los iconos y el index.html
+   antiguos (cambios de contenido, iconos PA3D y navegación) y
+   descarguen la copia actualizada.
 */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `anim-1085-${CACHE_VERSION}`;
 
 // Se precachea el propio documento para que la primera visita
