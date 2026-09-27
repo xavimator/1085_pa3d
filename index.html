@@ -1848,13 +1848,13 @@ const CHAPTERS = [
     "slides": [
       {
         "num": 1,
-        "title": "Actualidad en la animación",
+        "title": "En la actualidad estamos viviendo un periodo de expansión de la animación y su industria en todas sus vertientes artísticas y comerciales. Esto se refleja en un elevado consumo de animación, en multiples plataformas y formatos que van más allá del largometraje para salas de cine",
         "kicker": "La industria de la animación (I)",
         "virtual": false,
         "blocks": [
           {
             "type": "p",
-            "text": "En la actualidad estamos viviendo un periodo de expansión de la animación y su industria en todas sus vertientes artísticas y comerciales. Esto se refleja en un elevado consumo de animación, en multiples plataformas y formatos que van más allá del largometraje para salas de cine. El sector de la animación se define por una doble vertiente:"
+            "text": "El sector de la animación se define por una doble vertiente:"
           },
           {
             "type": "list",
@@ -6605,7 +6605,7 @@ const BADGE_NAMES = {
   1: 'Primer paso',
   2: 'Unidad 1 completada',
   3: 'Unidad 2 completada',
-  4: 'Última parte',
+  4: 'Caso práctico SEAT',
 };
 
 const AVATARS = [
@@ -6829,3 +6829,788 @@ function renderHome(){
     resultsBtn.classList.add('hidden');
     bankBtn.classList.add('hidden');
     locksBtn.classList.add('hidden');
+  }
+}
+function currentChapterIndex(){
+  return FLAT[Math.min(state.currentSlide, TOTAL_SLIDES-1)].chapterIndex;
+}
+
+/* ============================================================
+   SLIDE READER
+   ============================================================ */
+function enterReader(fromIndex){
+  state.currentSlide = fromIndex;
+  showScreen('reader');
+  renderSlide();
+}
+
+// Ajusta el padding del viewport a la altura REAL de los controles
+// superiores/inferiores (en vez de un valor fijo), para que el texto
+// nunca quede tapado, aunque la píldora del capítulo ocupe varias líneas
+// o los controles inferiores cambien de tamaño según el dispositivo.
+function syncReaderPadding(screenSel){
+  const scope = document.querySelector(screenSel);
+  if(!scope) return;
+  const top = scope.querySelector('.reader-top');
+  const controls = scope.querySelector('.reader-controls');
+  const viewport = scope.querySelector('.slide-viewport');
+  if(!viewport) return;
+  if(top) viewport.style.paddingTop = (top.offsetHeight + 22) + 'px';
+  if(controls) viewport.style.paddingBottom = (controls.offsetHeight + 22) + 'px';
+}
+
+function setupAdaptivePadding(){
+  ['#screen-reader', '#screen-practice'].forEach(sel => {
+    syncReaderPadding(sel);
+    const scope = document.querySelector(sel);
+    if(!scope) return;
+    const top = scope.querySelector('.reader-top');
+    const controls = scope.querySelector('.reader-controls');
+    if('ResizeObserver' in window){
+      const ro = new ResizeObserver(() => syncReaderPadding(sel));
+      if(top) ro.observe(top);
+      if(controls) ro.observe(controls);
+    }
+  });
+  window.addEventListener('resize', () => {
+    syncReaderPadding('#screen-reader');
+    syncReaderPadding('#screen-practice');
+  });
+}
+
+// ---- Mostrar/ocultar controles con un toque, y auto-ocultar a los 2s ----
+const READER_CONTROLS_TIMEOUT = 2000;
+const controlsRegistry = {};
+
+function getControlsRef(screenSel){
+  if(controlsRegistry[screenSel]) return controlsRegistry[screenSel];
+  const scope = document.querySelector(screenSel);
+  if(!scope) return null;
+  const ref = {
+    top: scope.querySelector('.reader-top'),
+    controls: scope.querySelector('.reader-controls'),
+    timer: null,
+  };
+  controlsRegistry[screenSel] = ref;
+  return ref;
+}
+
+function showReaderControls(screenSel){
+  const ref = getControlsRef(screenSel);
+  if(!ref) return;
+  if(ref.top) ref.top.classList.remove('controls-hidden');
+  if(ref.controls) ref.controls.classList.remove('controls-hidden');
+  clearTimeout(ref.timer);
+  ref.timer = setTimeout(() => hideReaderControls(screenSel), READER_CONTROLS_TIMEOUT);
+}
+
+function hideReaderControls(screenSel){
+  const ref = getControlsRef(screenSel);
+  if(!ref) return;
+  if(ref.top) ref.top.classList.add('controls-hidden');
+  if(ref.controls) ref.controls.classList.add('controls-hidden');
+  clearTimeout(ref.timer);
+  ref.timer = null;
+}
+
+function toggleReaderControls(screenSel){
+  const ref = getControlsRef(screenSel);
+  if(!ref) return;
+  const isHidden = (ref.top && ref.top.classList.contains('controls-hidden')) ||
+                    (ref.controls && ref.controls.classList.contains('controls-hidden'));
+  if(isHidden) showReaderControls(screenSel); else hideReaderControls(screenSel);
+}
+
+function setupControlsToggle(){
+  ['#screen-reader', '#screen-practice'].forEach(screenSel => {
+    const scope = document.querySelector(screenSel);
+    if(!scope) return;
+    const viewport = scope.querySelector('.slide-viewport');
+    const ref = getControlsRef(screenSel);
+    if(!viewport || !ref) return;
+
+    let downX = 0, downY = 0, moved = false;
+    viewport.addEventListener('pointerdown', e => {
+      downX = e.clientX; downY = e.clientY; moved = false;
+    });
+    viewport.addEventListener('pointermove', e => {
+      if(Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) moved = true;
+    });
+    viewport.addEventListener('pointerup', () => {
+      if(!moved) toggleReaderControls(screenSel);
+    });
+
+    // interactuar con los controles los mantiene visibles y reinicia el temporizador
+    [ref.top, ref.controls].forEach(el => {
+      if(!el) return;
+      el.addEventListener('pointerdown', () => showReaderControls(screenSel));
+    });
+
+    // al entrar, visibles, con su cuenta atrás de 2s
+    showReaderControls(screenSel);
+  });
+}
+
+function renderSlide(){
+  const idx = state.currentSlide;
+  const data = FLAT[idx];
+  state.slideEnterTime = Date.now();
+  startReadCountdown();
+
+  // top pills
+  const highestBadge = state.earnedBadges.length ? Math.max(...state.earnedBadges) : null;
+  const badgePill = $('#badgePill');
+  if(highestBadge){
+    badgePill.classList.remove('hidden');
+    $('#badgePillImg').src = BADGE_IMAGES[highestBadge];
+    $('#badgePillLabel').textContent = BADGE_NAMES[highestBadge];
+  } else {
+    badgePill.classList.add('hidden');
+  }
+  $('#chapterPill').textContent = data.chapterName;
+
+  // counter + slider
+  $('#slideCounterCur').textContent = idx + 1;
+  $('#slideCounterTotal').textContent = TOTAL_SLIDES;
+  const scrub = $('#scrub');
+  scrub.max = TOTAL_SLIDES - 1;
+  scrub.value = idx;
+  $('#prevArrow').disabled = idx === 0;
+
+  // content
+  const viewport = $('#slideViewport');
+  viewport.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'slide-card';
+
+  if(data.quiz){
+    card.appendChild(renderQuizIntro(data));
+  } else {
+    card.appendChild(renderContentSlide(data));
+  }
+  viewport.appendChild(card);
+  syncReaderPadding('#screen-reader');
+  showReaderControls('#screen-reader');
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderContentSlide(data){
+  const wrap = document.createElement('div');
+  const head = document.createElement('div');
+  head.innerHTML = `
+    <div class="slide-kicker">${escapeHtml(data.kicker || '')}</div>
+    <h2 class="slide-title">${escapeHtml(data.title)}</h2>
+  `;
+  wrap.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'slide-blocks';
+  (data.blocks || []).forEach(b => {
+    if(b.type === 'p'){
+      const isQuote = b.text.startsWith('«');
+      const p = document.createElement('p');
+      p.className = isQuote ? 'slide-body slide-quote' : 'slide-body';
+      p.textContent = b.text;
+      body.appendChild(p);
+    } else if(b.type === 'label'){
+      const l = document.createElement('div');
+      l.className = 'slide-label';
+      l.textContent = b.text;
+      body.appendChild(l);
+    } else if(b.type === 'list'){
+      const ul = document.createElement('ul');
+      ul.className = 'slide-list';
+      b.items.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);
+    } else if(b.type === 'table'){
+      const table = document.createElement('table');
+      table.className = 'slide-table';
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      b.headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      b.rows.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(cell => {
+          const td = document.createElement('td');
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      const scrollWrap = document.createElement('div');
+      scrollWrap.className = 'slide-table-wrap';
+      scrollWrap.appendChild(table);
+      body.appendChild(scrollWrap);
+    }
+  });
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function timeOnSlideOk(){
+  if(state.slideEnterTime === null) return true;
+  return (Date.now() - state.slideEnterTime) >= 60000;
+}
+
+function startReadCountdown(){
+  clearInterval(state.countdownTimer);
+  const el = $('#readCountdownText');
+  const pill = $('#readCountdown');
+  if(isSlideAlreadyReadOk(state.currentSlide)){
+    el.textContent = 'Pasar página';
+    pill.classList.add('ready');
+    return;
+  }
+  const tick = () => {
+    const elapsed = Date.now() - state.slideEnterTime;
+    const remaining = Math.max(0, 60 - Math.floor(elapsed / 1000));
+    if(remaining <= 0){
+      el.textContent = 'Pasar página';
+      pill.classList.add('ready');
+      clearInterval(state.countdownTimer);
+    } else {
+      el.textContent = `Leyendo… ${remaining} s`;
+      pill.classList.remove('ready');
+    }
+  };
+  tick();
+  state.countdownTimer = setInterval(tick, 250);
+}
+
+function showReadToast(){
+  const t = $('#readToast');
+  t.classList.add('show');
+  clearTimeout(showReadToast._t);
+  showReadToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function goNext(){
+  const idx = state.currentSlide;
+  const alreadyOk = isSlideAlreadyReadOk(idx);
+  const elapsed = state.slideEnterTime === null ? 60000 : (Date.now() - state.slideEnterTime);
+  const readOk = alreadyOk || elapsed >= 60000;
+  if(!readOk) showReadToast();
+  const data = FLAT[idx];
+  if(readOk) markSlideReadOk(idx);
+  if(!alreadyOk) trackSlideView(data, elapsed, readOk);
+
+  // badge1 on leaving very first slide of the whole course
+  if(state.currentSlide === 0 && !state.earnedBadges.includes(1)){
+    awardBadge(1, () => proceedNext(data));
+    return;
+  }
+  // chapter badge on leaving the quiz slide (last slide) of a chapter
+  if(data.isLastOfChapter && data.chapterBadge && !state.earnedBadges.includes(data.chapterBadge)){
+    awardBadge(data.chapterBadge, () => proceedNext(data));
+    return;
+  }
+  proceedNext(data);
+}
+
+function showLockOverlay(unlockAt){
+  const overlay = $('#lockOverlay');
+  $('#lockOverlayText').textContent = unlockAt
+    ? `Este contenido se abrirá el ${unlockAt.toLocaleString('es-ES')}.`
+    : 'Este contenido todavía no está disponible. Vuelve más adelante.';
+  overlay.classList.add('show');
+}
+
+function proceedNext(data){
+  if(state.currentSlide >= TOTAL_SLIDES - 1){
+    showFinale();
+    return;
+  }
+  const nextIdx = state.currentSlide + 1;
+  const nextChapter = CHAPTERS[FLAT[nextIdx].chapterIndex];
+  const access = isChapterLocked(nextChapter);
+  if(access.locked){
+    showLockOverlay(access.unlockAt);
+    return;
+  }
+  state.currentSlide = nextIdx;
+  saveProgress();
+  renderSlide();
+}
+
+function goPrev(){
+  const idx = state.currentSlide;
+  const alreadyOk = isSlideAlreadyReadOk(idx);
+  const elapsed = state.slideEnterTime === null ? 60000 : (Date.now() - state.slideEnterTime);
+  const readOk = alreadyOk || elapsed >= 60000;
+  if(!readOk) showReadToast();
+  if(readOk) markSlideReadOk(idx);
+  if(!alreadyOk) trackSlideView(FLAT[idx], elapsed, readOk);
+  if(state.currentSlide === 0) return;
+  state.currentSlide--;
+  saveProgress();
+  renderSlide();
+}
+
+function awardBadge(n, cont){
+  state.earnedBadges.push(n);
+  saveProgress();
+  trackBadgeEarned(n);
+  const overlay = $('#badgeOverlay');
+  $('#badgeOverlayImg').src = BADGE_IMAGES[n];
+  $('#badgeOverlayName').textContent = BADGE_NAMES[n];
+  overlay.classList.add('show');
+  const dismiss = () => {
+    overlay.classList.remove('show');
+    overlay.removeEventListener('click', dismiss);
+    clearTimeout(t);
+    cont();
+  };
+  overlay.addEventListener('click', dismiss);
+  const t = setTimeout(dismiss, 2200);
+}
+
+function showFinale(){
+  showScreen('finale');
+  const g = state.avatar.gender;
+  $('#finaleImg').src = state.avatar.hero;
+  $('#finaleText').textContent = g === 'f' ? 'Ya no eres perta' : 'Ya no eres perto';
+  const strip = $('#finaleBadges');
+  strip.innerHTML = '';
+  [1,2,3,4].forEach(n => {
+    if(state.earnedBadges.includes(n)){
+      const img = document.createElement('img');
+      img.src = BADGE_IMAGES[n];
+      strip.appendChild(img);
+    }
+  });
+}
+
+/* ---------- scrub slider ---------- */
+function initScrub(){
+  const scrub = $('#scrub');
+  scrub.addEventListener('input', () => {
+    // live preview only on release to avoid thrashing timers; but keep simple:
+  });
+  scrub.addEventListener('change', () => {
+    const idx = state.currentSlide;
+    const alreadyOk = isSlideAlreadyReadOk(idx);
+    const elapsed = state.slideEnterTime === null ? 60000 : (Date.now() - state.slideEnterTime);
+    const readOk = alreadyOk || elapsed >= 60000;
+    if(!readOk) showReadToast();
+    if(readOk) markSlideReadOk(idx);
+    if(!alreadyOk) trackSlideView(FLAT[idx], elapsed, readOk);
+    const targetIdx = parseInt(scrub.value, 10);
+    const targetChapter = CHAPTERS[FLAT[targetIdx].chapterIndex];
+    const access = isChapterLocked(targetChapter);
+    if(access.locked){
+      scrub.value = state.currentSlide;
+      showLockOverlay(access.unlockAt);
+      return;
+    }
+    state.currentSlide = targetIdx;
+    saveProgress();
+    renderSlide();
+  });
+}
+
+/* ============================================================
+   QUIZ ENGINE (used both inline in a chapter and standalone practice)
+   ============================================================ */
+function renderQuizIntro(data){
+  const ch = CHAPTERS[data.chapterIndex];
+  const n = Math.min(20, ch.quizPool.length);
+  const wrap = document.createElement('div');
+  wrap.className = 'quiz-wrap';
+  wrap.innerHTML = `
+    <div class="quiz-intro-icon">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    </div>
+    <div class="slide-kicker">${escapeHtml(data.kicker)}</div>
+    <h2 class="slide-title">Cuestionario: ${escapeHtml(ch.name)}</h2>
+    <p class="quiz-meta">${n} preguntas tipo test de nivel medio sobre este capítulo, con la explicación de cada respuesta. Puedes repetirlo tantas veces como quieras: las preguntas y sus opciones cambian de orden cada vez.</p>
+    <button class="btn btn-gold" id="startQuizBtn">Comenzar cuestionario</button>
+  `;
+  wrap.querySelector('#startQuizBtn').addEventListener('click', () => {
+    startQuiz(ch, false);
+  });
+  return wrap;
+}
+
+function pickQuestions(ch){
+  const n = Math.min(20, ch.quizPool.length);
+  const chosen = shuffle(ch.quizPool).slice(0, n);
+  return chosen.map(q => {
+    const opts = q.options.map((text, i) => ({ text, correct: i === q.correct }));
+    return { q: q.q, explain: q.explain || '', options: shuffle(opts) };
+  });
+}
+
+function startQuiz(ch, standalone){
+  state.quiz = {
+    chapter: ch,
+    questions: pickQuestions(ch),
+    idx: 0,
+    correct: 0,
+    incorrect: 0,
+    standalone,
+  };
+  renderQuizQuestion();
+}
+
+function renderQuizQuestion(){
+  const quiz = state.quiz;
+  const q = quiz.questions[quiz.idx];
+  const container = quiz.standalone ? $('#practiceViewport') : $('#slideViewport');
+  container.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'quiz-wrap slide-card';
+  wrap.innerHTML = `
+    <div class="q-progress">Pregunta ${quiz.idx + 1} de ${quiz.questions.length}</div>
+    <div class="q-text">${escapeHtml(q.q)}</div>
+    <div class="q-options" id="qOptions"></div>
+    <div class="q-explain-wrap" id="qExplainWrap"></div>
+  `;
+  const optWrap = wrap.querySelector('#qOptions');
+  q.options.forEach((opt, i) => {
+    const b = document.createElement('button');
+    b.className = 'q-option';
+    b.textContent = opt.text;
+    b.addEventListener('click', () => answerQuiz(i, wrap));
+    optWrap.appendChild(b);
+  });
+  container.appendChild(wrap);
+  syncReaderPadding(quiz.standalone ? '#screen-practice' : '#screen-reader');
+  showReaderControls(quiz.standalone ? '#screen-practice' : '#screen-reader');
+}
+
+function answerQuiz(i, wrap){
+  const quiz = state.quiz;
+  const q = quiz.questions[quiz.idx];
+  if(q.answered) return;
+  q.answered = true;
+  const opts = $$('.q-option', wrap);
+  const wasCorrect = q.options[i].correct;
+  opts.forEach((el, idx) => {
+    el.disabled = true;
+    if(q.options[idx].correct) el.classList.add('correct');
+    else if(idx === i) el.classList.add('incorrect');
+  });
+  if(wasCorrect) quiz.correct++;
+  else quiz.incorrect++;
+
+  const explainWrap = wrap.querySelector('#qExplainWrap');
+  const isLast = quiz.idx >= quiz.questions.length - 1;
+  explainWrap.innerHTML = `
+    <div class="q-explain ${wasCorrect ? 'ok' : 'bad'}">
+      <div class="q-explain-tag">${wasCorrect ? '✓ Correcto' : '✕ Incorrecto'}</div>
+      <p>${escapeHtml(q.explain || '')}</p>
+    </div>
+    <button class="btn btn-gold" id="qContinueBtn">${isLast ? 'Ver resultado' : 'Siguiente pregunta'}</button>
+  `;
+  explainWrap.classList.add('show');
+  explainWrap.querySelector('#qContinueBtn').addEventListener('click', () => {
+    if(!isLast){
+      quiz.idx++;
+      renderQuizQuestion();
+    } else {
+      renderQuizResult();
+    }
+  });
+}
+
+function renderQuizResult(){
+  const quiz = state.quiz;
+  trackQuizAttempt(quiz);
+  const container = quiz.standalone ? $('#practiceViewport') : $('#slideViewport');
+  container.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'quiz-wrap slide-card quiz-result';
+  const total = quiz.questions.length;
+  wrap.innerHTML = `
+    <div class="big-score">${quiz.correct}<span>/${total}</span></div>
+    <div class="msg">${quiz.correct === total ? '¡Puntuación perfecta!' : (quiz.correct/total >= 0.6 ? 'Buen trabajo. Ya dominas este capítulo.' : 'Repasa el capítulo y vuelve a intentarlo.')}</div>
+    <div class="quiz-score-preview">
+      <div class="score-chip ok"><div class="n">${quiz.correct}</div><div class="l">Correctas</div></div>
+      <div class="score-chip bad"><div class="n">${quiz.incorrect}</div><div class="l">Incorrectas</div></div>
+    </div>
+    <button class="btn btn-gold" id="retryQuizBtn">Repetir cuestionario</button>
+    ${quiz.standalone ? '<button class="btn btn-ghost" id="quizDoneBtn" style="margin-top:10px;">Volver</button>' : '<div style="height:2px"></div>'}
+  `;
+  container.appendChild(wrap);
+  wrap.querySelector('#retryQuizBtn').addEventListener('click', () => startQuiz(quiz.chapter, quiz.standalone));
+  if(quiz.standalone){
+    wrap.querySelector('#quizDoneBtn').addEventListener('click', () => showScreen('home'));
+  }
+  syncReaderPadding(quiz.standalone ? '#screen-practice' : '#screen-reader');
+  showReaderControls(quiz.standalone ? '#screen-practice' : '#screen-reader');
+}
+
+/* ============================================================
+   PRACTICE MODE (quiz standalone from lobby)
+   ============================================================ */
+function renderPracticePicker(){
+  const list = $('#pickerList');
+  list.innerHTML = '';
+  let lastUnitLabel = null;
+  CHAPTERS.forEach(ch => {
+    if(ch.unitLabel !== lastUnitLabel){
+      lastUnitLabel = ch.unitLabel;
+      const unitHead = document.createElement('div');
+      unitHead.className = 'unit-heading';
+      unitHead.textContent = ch.unitLabel;
+      list.appendChild(unitHead);
+    }
+    const access = isChapterLocked(ch);
+    const item = document.createElement('button');
+    item.className = 'picker-item' + (access.locked ? ' locked' : '');
+    const statusLine = access.locked
+      ? (access.unlockAt ? `Se abre el ${access.unlockAt.toLocaleDateString('es-ES')}` : 'Bloqueado')
+      : `${Math.min(20, ch.quizPool.length)} preguntas por intento (banco de ${ch.quizPool.length})`;
+    item.innerHTML = `
+      <div class="num">${access.locked ? '🔒' : ch.id}</div>
+      <div class="meta">
+        <div class="t">${ch.name}</div>
+        <div class="s">${statusLine}</div>
+      </div>
+      <svg class="icon" viewBox="0 0 24 24" style="stroke:#8a9a9a; flex-shrink:0;"><path d="M9 18l6-6-6-6"/></svg>
+    `;
+    item.addEventListener('click', () => {
+      if(access.locked){ showLockOverlay(access.unlockAt); return; }
+      showScreen('practice');
+      state.quiz = null;
+      startQuiz(ch, true);
+    });
+    list.appendChild(item);
+  });
+}
+
+/* ============================================================
+   BANCO DE PREGUNTAS — solo AnimaKing
+   ============================================================ */
+function renderBankChapterList(){
+  const list = $('#bankChapterList');
+  list.innerHTML = '';
+  $('#bankQuestionList').innerHTML = '';
+  let lastUnit = null;
+  CHAPTERS.forEach(ch => {
+    if(ch.unitLabel !== lastUnit){
+      lastUnit = ch.unitLabel;
+      const h = document.createElement('div');
+      h.className = 'unit-heading';
+      h.textContent = ch.unitLabel;
+      list.appendChild(h);
+    }
+    const item = document.createElement('button');
+    item.className = 'picker-item';
+    item.innerHTML = `
+      <div class="num">${ch.id}</div>
+      <div class="meta">
+        <div class="t">${ch.name}</div>
+        <div class="s">${ch.quizPool.length} preguntas en el banco</div>
+      </div>
+      <svg class="icon" viewBox="0 0 24 24" style="stroke:#8a9a9a; flex-shrink:0;"><path d="M9 18l6-6-6-6"/></svg>
+    `;
+    item.addEventListener('click', () => renderBankQuestions(ch));
+    list.appendChild(item);
+  });
+}
+
+function renderBankQuestions(ch){
+  $('#bankChapterList').classList.add('hidden');
+  const wrap = $('#bankQuestionList');
+  wrap.innerHTML = `
+    <button class="back-btn" id="bankQuestionsBackBtn" style="margin-bottom:14px;">
+      <svg class="icon" viewBox="0 0 24 24" style="stroke:var(--ink)"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <h3 style="font-size:16px; margin-bottom:14px;">${escapeHtml(ch.name)} — ${ch.quizPool.length} preguntas</h3>
+  `;
+  ch.quizPool.forEach((q, i) => {
+    const card = document.createElement('div');
+    card.className = 'bank-q-card';
+    const optsHtml = q.options.map((opt, oi) => `
+      <div class="bank-opt ${oi === q.correct ? 'correct' : ''}">${oi === q.correct ? '✓ ' : ''}${escapeHtml(opt)}</div>
+    `).join('');
+    card.innerHTML = `
+      <div class="bank-q-num">${i + 1}</div>
+      <div class="bank-q-text">${escapeHtml(q.q)}</div>
+      <div class="bank-opts">${optsHtml}</div>
+      <div class="bank-explain">${escapeHtml(q.explain || '')}</div>
+    `;
+    wrap.appendChild(card);
+  });
+  wrap.querySelector('#bankQuestionsBackBtn').addEventListener('click', () => {
+    $('#bankChapterList').classList.remove('hidden');
+    wrap.innerHTML = '';
+  });
+}
+
+/* ============================================================
+   GESTIÓN DE ACCESO A CONTENIDOS — solo AnimaKing
+   ============================================================ */
+function fmtDateLocal(d){
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function renderLocksScreen(){
+  const list = $('#locksList');
+  list.innerHTML = '<p style="font-size:13px; color:#7c8c8c;">Cargando…</p>';
+  await refreshLocks();
+  list.innerHTML = '';
+  CHAPTERS.filter(ch => LOCKABLE_GROUP_KEYS.includes(ch.key)).forEach(ch => {
+    const row = (state.locks || {})[ch.key];
+    const status = lockStatusFor(row);
+    const card = document.createElement('div');
+    card.className = 'lock-card';
+    const statusText = !status.locked
+      ? '<span class="lock-status open">Desbloqueado</span>'
+      : status.unlockAt
+        ? `<span class="lock-status scheduled">Se abre el ${status.unlockAt.toLocaleString('es-ES')}</span>`
+        : '<span class="lock-status closed">Bloqueado</span>';
+    card.innerHTML = `
+      <div class="lock-head">
+        <div class="t">${ch.id}. ${escapeHtml(ch.name)}</div>
+        ${statusText}
+      </div>
+      <div class="lock-actions">
+        <button class="btn-small btn-outline-dark" data-action="unlock" data-key="${ch.key}">Desbloquear ahora</button>
+        <button class="btn-small btn-outline-dark" data-action="lock" data-key="${ch.key}">Bloquear</button>
+      </div>
+      <div class="lock-schedule">
+        <input type="datetime-local" id="dt-${ch.key}">
+        <button class="btn-small btn-gold" data-action="schedule" data-key="${ch.key}">Programar apertura</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+
+  $$('button[data-action]', list).forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.key;
+      const action = btn.dataset.action;
+      btn.disabled = true;
+      let result;
+      if(action === 'unlock'){
+        result = await saveContentLock(key, { unlocked: true, unlockAt: null });
+      } else if(action === 'lock'){
+        result = await saveContentLock(key, { unlocked: false, unlockAt: null });
+      } else if(action === 'schedule'){
+        const input = $('#dt-' + key);
+        if(!input.value){ btn.disabled = false; return; }
+        const iso = new Date(input.value).toISOString();
+        result = await saveContentLock(key, { unlocked: false, unlockAt: iso });
+      }
+      if(result && result.error) alert(result.error);
+      await renderLocksScreen();
+    });
+  });
+}
+function renderDrawer(){
+  const grid = $('#drawerBadges');
+  grid.innerHTML = '';
+  [1,2,3,4].forEach(n => {
+    const earned = state.earnedBadges.includes(n);
+    const d = document.createElement('div');
+    d.className = 'drawer-badge' + (earned ? '' : ' locked');
+    d.innerHTML = `
+      <img src="${BADGE_IMAGES[n]}" alt="">
+      <div class="n">${BADGE_NAMES[n]}</div>
+      <div class="d">${earned ? 'Conseguido' : 'Pendiente'}</div>
+    `;
+    grid.appendChild(d);
+  });
+}
+function openDrawer(){
+  renderDrawer();
+  $('#drawerBackdrop').classList.add('show');
+  $('#drawer').classList.add('show');
+}
+function closeDrawer(){
+  $('#drawerBackdrop').classList.remove('show');
+  $('#drawer').classList.remove('show');
+}
+
+/* ============================================================
+   WIRE UP
+   ============================================================ */
+function init(){
+  initSupabase();
+  initLogin();
+  initScrub();
+
+  $('#prevArrow').addEventListener('click', goPrev);
+  $('#nextArrow').addEventListener('click', goNext);
+  $('#closeReaderBtn').addEventListener('click', async () => { clearInterval(state.countdownTimer); await refreshLocks(); renderHome(); showScreen('home'); });
+  $('#achievementsBtn').addEventListener('click', openDrawer);
+  $('#drawerBackdrop').addEventListener('click', closeDrawer);
+
+  $('#startBtn').addEventListener('click', () => {
+    const ch = CHAPTERS[FLAT[state.currentSlide].chapterIndex];
+    const access = isChapterLocked(ch);
+    if(access.locked){ showLockOverlay(access.unlockAt); return; }
+    enterReader(state.currentSlide);
+  });
+  $('#practiceBtn').addEventListener('click', async () => { await refreshLocks(); renderPracticePicker(); showScreen('practicePicker'); });
+  $('#practiceBackBtn').addEventListener('click', () => showScreen('home'));
+  $('#pickerExitBtn').addEventListener('click', () => { renderHome(); showScreen('home'); });
+  $('#practiceQuizBackBtn').addEventListener('click', () => showScreen('home'));
+
+  $('#resultsBtn').addEventListener('click', () => { showScreen('results'); renderResultsPanel(); });
+  $('#resultsBackBtn').addEventListener('click', () => showScreen('home'));
+  $('#resultsRefreshBtn').addEventListener('click', () => renderResultsPanel());
+
+  $('#bankBtn').addEventListener('click', () => { renderBankChapterList(); showScreen('bank'); });
+  $('#bankBackBtn').addEventListener('click', () => showScreen('home'));
+
+  $('#locksBtn').addEventListener('click', () => { showScreen('locks'); renderLocksScreen(); });
+  $('#locksBackBtn').addEventListener('click', () => showScreen('home'));
+
+  $('#finaleHomeBtn').addEventListener('click', () => { renderHome(); showScreen('home'); });
+
+  // swipe support
+  let touchStartX = null, touchStartY = null;
+  const vp = $('#screen-reader');
+  vp.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+  }, {passive:true});
+  vp.addEventListener('touchend', e => {
+    if(touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4){
+      if(dx < 0) goNext(); else goPrev();
+    }
+    touchStartX = null;
+  }, {passive:true});
+
+  setupAdaptivePadding();
+  setupControlsToggle();
+
+  showScreen('login');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch((err) => {
+        console.warn('No se pudo registrar el service worker:', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
