@@ -276,7 +276,9 @@ button{font-family:var(--font-body);cursor:pointer;}
 .reader-top{
   position:absolute; top:calc(14px + var(--safe-t)); left:14px; right:14px;
   display:flex; justify-content:space-between; align-items:flex-start; z-index:20;
+  transition:opacity .25s ease, transform .25s ease;
 }
+.reader-top.controls-hidden{opacity:0; transform:translateY(-14px); pointer-events:none;}
 .badge-pill{
   display:flex; align-items:center; gap:7px;
   background:rgba(0,0,0,0.32); backdrop-filter:blur(6px);
@@ -442,7 +444,9 @@ button{font-family:var(--font-body);cursor:pointer;}
   position:absolute; left:0; right:0; bottom:0; z-index:25;
   background:linear-gradient(180deg, rgba(6,38,50,0) 0%, rgba(6,38,50,0.94) 30%, var(--petrol-deep) 100%);
   padding:16px 16px calc(10px + var(--safe-b));
+  transition:opacity .25s ease, transform .25s ease;
 }
+.reader-controls.controls-hidden{opacity:0; transform:translateY(14px); pointer-events:none;}
 .read-countdown{
   display:flex; align-items:center; justify-content:center; gap:6px;
   margin-bottom:7px; font-size:10.5px; font-weight:600; color:rgba(255,255,255,0.55);
@@ -6874,6 +6878,79 @@ function setupAdaptivePadding(){
   });
 }
 
+// ---- Mostrar/ocultar controles con un toque, y auto-ocultar a los 2s ----
+const READER_CONTROLS_TIMEOUT = 2000;
+const controlsRegistry = {};
+
+function getControlsRef(screenSel){
+  if(controlsRegistry[screenSel]) return controlsRegistry[screenSel];
+  const scope = document.querySelector(screenSel);
+  if(!scope) return null;
+  const ref = {
+    top: scope.querySelector('.reader-top'),
+    controls: scope.querySelector('.reader-controls'),
+    timer: null,
+  };
+  controlsRegistry[screenSel] = ref;
+  return ref;
+}
+
+function showReaderControls(screenSel){
+  const ref = getControlsRef(screenSel);
+  if(!ref) return;
+  if(ref.top) ref.top.classList.remove('controls-hidden');
+  if(ref.controls) ref.controls.classList.remove('controls-hidden');
+  clearTimeout(ref.timer);
+  ref.timer = setTimeout(() => hideReaderControls(screenSel), READER_CONTROLS_TIMEOUT);
+}
+
+function hideReaderControls(screenSel){
+  const ref = getControlsRef(screenSel);
+  if(!ref) return;
+  if(ref.top) ref.top.classList.add('controls-hidden');
+  if(ref.controls) ref.controls.classList.add('controls-hidden');
+  clearTimeout(ref.timer);
+  ref.timer = null;
+}
+
+function toggleReaderControls(screenSel){
+  const ref = getControlsRef(screenSel);
+  if(!ref) return;
+  const isHidden = (ref.top && ref.top.classList.contains('controls-hidden')) ||
+                    (ref.controls && ref.controls.classList.contains('controls-hidden'));
+  if(isHidden) showReaderControls(screenSel); else hideReaderControls(screenSel);
+}
+
+function setupControlsToggle(){
+  ['#screen-reader', '#screen-practice'].forEach(screenSel => {
+    const scope = document.querySelector(screenSel);
+    if(!scope) return;
+    const viewport = scope.querySelector('.slide-viewport');
+    const ref = getControlsRef(screenSel);
+    if(!viewport || !ref) return;
+
+    let downX = 0, downY = 0, moved = false;
+    viewport.addEventListener('pointerdown', e => {
+      downX = e.clientX; downY = e.clientY; moved = false;
+    });
+    viewport.addEventListener('pointermove', e => {
+      if(Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) moved = true;
+    });
+    viewport.addEventListener('pointerup', () => {
+      if(!moved) toggleReaderControls(screenSel);
+    });
+
+    // interactuar con los controles los mantiene visibles y reinicia el temporizador
+    [ref.top, ref.controls].forEach(el => {
+      if(!el) return;
+      el.addEventListener('pointerdown', () => showReaderControls(screenSel));
+    });
+
+    // al entrar, visibles, con su cuenta atrás de 2s
+    showReaderControls(screenSel);
+  });
+}
+
 function renderSlide(){
   const idx = state.currentSlide;
   const data = FLAT[idx];
@@ -6913,6 +6990,7 @@ function renderSlide(){
   }
   viewport.appendChild(card);
   syncReaderPadding('#screen-reader');
+  showReaderControls('#screen-reader');
 }
 
 function escapeHtml(str){
@@ -7214,6 +7292,7 @@ function renderQuizQuestion(){
   });
   container.appendChild(wrap);
   syncReaderPadding(quiz.standalone ? '#screen-practice' : '#screen-reader');
+  showReaderControls(quiz.standalone ? '#screen-practice' : '#screen-reader');
 }
 
 function answerQuiz(i, wrap){
@@ -7275,6 +7354,7 @@ function renderQuizResult(){
     wrap.querySelector('#quizDoneBtn').addEventListener('click', () => showScreen('home'));
   }
   syncReaderPadding(quiz.standalone ? '#screen-practice' : '#screen-reader');
+  showReaderControls(quiz.standalone ? '#screen-practice' : '#screen-reader');
 }
 
 /* ============================================================
@@ -7516,6 +7596,7 @@ function init(){
   }, {passive:true});
 
   setupAdaptivePadding();
+  setupControlsToggle();
 
   showScreen('login');
 }
