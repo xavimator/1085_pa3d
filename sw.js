@@ -18,7 +18,7 @@
    descarguen la copia actualizada.
 */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `anim-1085-${CACHE_VERSION}`;
 
 // Se precachea el propio documento para que la primera visita
